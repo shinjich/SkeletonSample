@@ -24,6 +24,7 @@ k4abt_tracker_t g_hTracker = nullptr;		// ボディトラッカーのハンドル
 k4a_calibration_t g_Calibration;			// Azure Kinect のキャリブレーションデータ
 k4abt_skeleton_t g_Skeleton[MAX_BODIES];	// ユーザーの 3D 骨格情報
 k4a_float2_t g_fSkeleton2D[MAX_BODIES][K4ABT_JOINT_COUNT] = { 0.0f, };	// ユーザーの 2D 骨格座標 (表示用)
+uint32_t g_uBodyID[MAX_BODIES] = { K4ABT_INVALID_BODY_ID, };
 uint32_t g_uBodies = 0;						// 骨格追跡されている人数
 
 #if ENABLE_CSV_OUTPUT
@@ -97,6 +98,7 @@ void DestroyKinect()
 	// 骨格追跡を無効にする
 	if ( g_hTracker )
 	{
+		k4abt_tracker_shutdown( g_hTracker );
 		k4abt_tracker_destroy( g_hTracker );
 		g_hTracker = nullptr;
 	}
@@ -125,7 +127,7 @@ uint32_t KinectProc()
 	{
 		// 骨格追跡をキューする
 		hr = k4abt_tracker_enqueue_capture( g_hTracker, hCapture, K4A_WAIT_INFINITE );
-		// カメラキャプチャーを開放する
+		// カメラキャプチャーを解放する
 		k4a_capture_release( hCapture );
 		if ( hr == K4A_WAIT_RESULT_SUCCEEDED )
 		{
@@ -143,6 +145,7 @@ uint32_t KinectProc()
 					// 各人の骨格情報を取得する
 					if ( k4abt_frame_get_body_skeleton( hBodyFrame, uBody, &g_Skeleton[uBody] ) == K4A_RESULT_SUCCEEDED )
 					{
+						g_uBodyID[uBody] = k4abt_frame_get_body_id( hBodyFrame, uBody );
 						for( int iJoint = K4ABT_JOINT_PELVIS; iJoint < K4ABT_JOINT_COUNT; iJoint++ )
 						{
 							int iValid = 0;
@@ -156,7 +159,7 @@ uint32_t KinectProc()
 						}
 					}
 				}
-				// 骨格追跡フレームを開放する
+				// 骨格追跡フレームを解放する
 				k4abt_frame_release( hBodyFrame );
 				g_uBodies = uBodies;
 			}
@@ -245,7 +248,11 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam )
 						break;
 					}
 					TextOut( hDC, lSkeletonX[iJoint], lSkeletonY[iJoint], szText, (int) _tcslen( szText ) );
+
 				}
+				_stprintf_s( szText, 128, TEXT("ID: %d"), g_uBodyID[uBody] );
+				SetTextColor( hDC, RGB( 255, 255, 255 ) );
+				TextOut( hDC, lSkeletonX[K4ABT_JOINT_NOSE], lSkeletonY[K4ABT_JOINT_NOSE] - 40, szText, (int) _tcslen( szText ) );
 				
 				// 骨格の表示
 
@@ -349,6 +356,7 @@ HRESULT InitApp( HINSTANCE hInst, int nCmdShow )
 		return E_FAIL;
 	}
 
+	// ウィンドウを表示する
 	ShowWindow( g_hWnd, nCmdShow );
 	UpdateWindow( g_hWnd );
 
@@ -376,7 +384,7 @@ int WINAPI WinMain( HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow )
 
 #if ENABLE_CSV_OUTPUT
 	// CSV を初期化する
-	g_hFile = CreateFileA( "output.csv", GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL );
+	g_hFile = CreateFileA( "skeleton.csv", GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL );
 #endif
 
 	// KINECT を初期化する
